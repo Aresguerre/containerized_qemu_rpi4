@@ -58,11 +58,11 @@ RUN mcopy /tmp/ssh x:/ && \
 EXPOSE 2222
 EXPOSE 5555
 
-ENTRYPOINT qemu-system-aarch64 -machine virt -cpu cortex-a72 -m 2G -smp 4 \
+ENTRYPOINT qemu-system-aarch64 -machine raspi4b -cpu cortex-a72 -m 2G -smp 4 \
             -nographic \
             -dtb bcm2711-rpi-4-b.dtb \
             -kernel kernel8.img -drive file=${IMAGE_FILE},format=raw -append "rw earlyprintk loglevel=8 console=ttyAMA0,115200 dwc_otg.lpm_enable=0 root=/dev/mmcblk0p2 rootdelay=1" \
-            -device virtio-net-pci,netdev=net0 \
+            -device usb-net,netdev=net0 \
             -netdev user,id=net0,hostfwd=tcp::2222-:22 \
             -monitor telnet:127.0.0.1:5555,server,nowait \
             -d guest_errors,unimp -D qemu.log
