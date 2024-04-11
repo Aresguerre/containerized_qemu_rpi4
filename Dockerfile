@@ -6,13 +6,13 @@ RUN apt-get update && \
     apt-get install -y git libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev ninja-build libnfs-dev libiscsi-dev python3-pip flex bison libslirp-dev && \
     apt-get install -y fdisk wget mtools xz-utils qemu-utils
 
-RUN git clone https://github.com/qemu/qemu.git
+RUN git clone https://github.com/0xMirasio/qemu-patch-raspberry4.git
 
-WORKDIR /qemu
+WORKDIR /qemu-patch-raspberry4
 
 RUN mkdir build && \
     cd build && \
-    ../configure --target-list=aarch64-softmmu --enable-slirp && \
+    ../configure --target-list=aarch64-softmmu --enable-user && \
     make -j$(nproc) && \
     make install
 
@@ -58,13 +58,15 @@ RUN mcopy /tmp/ssh x:/ && \
 EXPOSE 2222
 EXPOSE 5555
 
-ENTRYPOINT qemu-system-aarch64 -machine raspi4b -cpu cortex-a72 -m 2G -smp 4 \
-            -nographic \
+ENTRYPOINT qemu-system-aarch64 -machine raspi4b1g -cpu cortex-a72 -m 1G -smp 4 \
             -dtb bcm2711-rpi-4-b.dtb \
-            -kernel kernel8.img -drive file=${IMAGE_FILE},format=raw -append "rw earlyprintk loglevel=8 console=ttyAMA0,115200 dwc_otg.lpm_enable=0 root=/dev/mmcblk0p2 rootdelay=1" \
+            -kernel kernel8.img \
+            -append "rw earlyprintk loglevel=8 console=ttyAMA0,115200 dwc_otg.lpm_enable=0 root=/dev/mmcblk0p2 rootdelay=1" \
+            -drive file=${IMAGE_FILE},format=raw \
             -device usb-net,netdev=net0 \
             -netdev user,id=net0,hostfwd=tcp::2222-:22 \
             -monitor telnet:127.0.0.1:5555,server,nowait \
-            -d guest_errors,unimp -D qemu.log
+            -d guest_errors,unimp -D qemu.log \
+            -nographic
 
 
