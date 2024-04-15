@@ -3,22 +3,38 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
-    apt-get install -y git libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev ninja-build libnfs-dev libiscsi-dev python3-pip flex bison libslirp-dev && \
+    # Install QEMU dependencies
+    apt-get install -y git libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev ninja-build meson libslirp-dev python3-pip && \
+    # Install dtmerge dependencies
+    apt-get install -y cmake libfdt-dev && \
+    # Install mtools to extract files from the disk image
     apt-get install -y fdisk wget mtools xz-utils qemu-utils
 
-RUN git clone https://github.com/0xMirasio/qemu-patch-raspberry4.git
+# Build QEMU
+RUN git clone https://gitlab.freedesktop.org/slirp/libslirp.git && \
+    cd libslirp && \
+    meson build && \
+    ninja -C build install
 
-WORKDIR /qemu-patch-raspberry4
+RUN git clone https://github.com/qemu/qemu.git
 
-RUN mkdir build && \
-    cd build && \
-    ../configure --target-list=aarch64-softmmu --enable-user && \
+RUN cd qemu && mkdir build && cd build && \
+    ../configure --target-list=aarch64-softmmu,aarch64-linux-user --enable-modules --enable-slirp --enable-kvm && \
     make -j$(nproc) && \
     make install
 
+# Build dtmerge
+RUN git clone https://github.com/raspberrypi/utils.git
+
+RUN cd utils && \
+    cmake . && \
+    make && \
+    make install
+
 # Download the kernel image
-RUN wget https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2024-03-15/2024-03-15-raspios-bookworm-arm64-lite.img.xz
-ENV IMAGE_FILE=2024-03-15-raspios-bookworm-arm64-lite.img
+ENV IMAGE_FILE=2024-03-12-raspios-bullseye-arm64-lite.img
+
+RUN wget https://downloads.raspberrypi.com/raspios_oldstable_lite_arm64/images/raspios_oldstable_lite_arm64-2024-03-12/${IMAGE_FILE}.xz
 
 # Uncompress the image
 RUN xz -d ${IMAGE_FILE}.xz
@@ -38,9 +54,19 @@ RUN OFFSET=$(fdisk -lu ${IMAGE_FILE} | awk '/^Sector size/ {sector_size=$4} /FAT
     # Setup mtools config to extract files from the partition
     echo "drive x: file=\"${IMAGE_FILE}\" offset=${OFFSET}" > ~/.mtoolsrc
 
-# Copy the kernel image from the disk image
-RUN mcopy x:/bcm2711-rpi-4-b.dtb . && \
+ENV DTB=bcm2710-rpi-3-b-plus.dtb
+
+# Copy the kernel image and the device tree from the disk
+RUN mcopy x:/${DTB} . && \
+    mcopy x:/overlays/disable-bt.dtbo . && \
     mcopy x:/kernel8.img .
+
+# Merge the device tree with the overlay
+RUN cp ${DTB} custom.dtb && \
+    dtmerge custom.dtb merged.dtb - uart0=on && \
+    mv merged.dtb custom.dtb && \
+    dtmerge custom.dtb merged.dtb disable-bt.dtbo && \
+    mv merged.dtb custom.dtb
 
 # Set up SSH
 # RPI changed default password policy, there is no longer default password
@@ -58,15 +84,15 @@ RUN mcopy /tmp/ssh x:/ && \
 EXPOSE 2222
 EXPOSE 5555
 
-ENTRYPOINT qemu-system-aarch64 -machine raspi4b1g -cpu cortex-a72 -m 1G -smp 4 \
-            -dtb bcm2711-rpi-4-b.dtb \
+ENTRYPOINT qemu-system-aarch64 -machine raspi3b -cpu cortex-a72 -m 1G -smp 4 \
+            -dtb custom.dtb \
             -kernel kernel8.img \
             -append "rw earlyprintk loglevel=8 console=ttyAMA0,115200 dwc_otg.lpm_enable=0 root=/dev/mmcblk0p2 rootdelay=1" \
             -drive file=${IMAGE_FILE},format=raw \
             -device usb-net,netdev=net0 \
             -netdev user,id=net0,hostfwd=tcp::2222-:22 \
             -monitor telnet:127.0.0.1:5555,server,nowait \
-            -d guest_errors,unimp -D qemu.log \
+            -serial stdio && \
             -nographic
 
 
