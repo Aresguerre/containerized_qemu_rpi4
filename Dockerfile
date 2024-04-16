@@ -40,6 +40,7 @@ RUN wget https://downloads.raspberrypi.com/raspios_oldstable_lite_arm64/images/r
 RUN xz -d ${IMAGE_FILE}.xz
 
 # Resize the image to next power of two
+RUN cp ${IMAGE_FILE} ${IMAGE_FILE}.bak 
 RUN CURRENT_SIZE=$(stat -c%s "${IMAGE_FILE}") && \
     NEXT_POWER_OF_TWO=$(python3 -c "import math; \
                                     print(2**(math.ceil(math.log(${CURRENT_SIZE}, 2))))") && \
@@ -54,7 +55,7 @@ RUN OFFSET=$(fdisk -lu ${IMAGE_FILE} | awk '/^Sector size/ {sector_size=$4} /FAT
     # Setup mtools config to extract files from the partition
     echo "drive x: file=\"${IMAGE_FILE}\" offset=${OFFSET}" > ~/.mtoolsrc
 
-ENV DTB=bcm2710-rpi-3-b-plus.dtb
+ENV DTB=bcm2711-rpi-4-b.dtb
 
 # Copy the kernel image and the device tree from the disk
 RUN mcopy x:/${DTB} . && \
@@ -67,6 +68,10 @@ RUN cp ${DTB} custom.dtb && \
     mv merged.dtb custom.dtb && \
     dtmerge custom.dtb merged.dtb disable-bt.dtbo && \
     mv merged.dtb custom.dtb
+
+COPY . .
+
+RUN chmod +x entrypoint.sh
 
 # Set up SSH
 # RPI changed default password policy, there is no longer default password
@@ -84,15 +89,4 @@ RUN mcopy /tmp/ssh x:/ && \
 EXPOSE 2222
 EXPOSE 5555
 
-ENTRYPOINT qemu-system-aarch64 -machine raspi3b -cpu cortex-a72 -m 1G -smp 4 \
-            -dtb custom.dtb \
-            -kernel kernel8.img \
-            -append "rw earlyprintk loglevel=8 console=ttyAMA0,115200 dwc_otg.lpm_enable=0 root=/dev/mmcblk0p2 rootdelay=1" \
-            -drive file=${IMAGE_FILE},format=raw \
-            -device usb-net,netdev=net0 \
-            -netdev user,id=net0,hostfwd=tcp::2222-:22 \
-            -monitor telnet:127.0.0.1:5555,server,nowait \
-            -serial stdio && \
-            -nographic
-
-
+ENTRYPOINT [ "/bin/bash" ]
