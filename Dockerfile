@@ -80,7 +80,6 @@ RUN mkdir -p /tmp && \
 RUN mcopy /tmp/ssh x:/ && \
     mcopy /tmp/userconf x:/
 
-
 EXPOSE 2222
 EXPOSE 5555
 
