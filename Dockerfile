@@ -16,17 +16,15 @@ RUN git clone https://gitlab.freedesktop.org/slirp/libslirp.git && \
     meson build && \
     ninja -C build install
 
-RUN git clone https://github.com/qemu/qemu.git
-
-RUN cd qemu && mkdir build && cd build && \
-    ../configure --target-list=aarch64-softmmu,aarch64-linux-user --enable-modules --enable-slirp --enable-kvm && \
+RUN git clone https://github.com/qemu/qemu.git && \
+    cd qemu && mkdir build && cd build && \
+    ../configure --target-list=aarch64-softmmu && \
     make -j$(nproc) && \
     make install
 
 # Build dtmerge
-RUN git clone https://github.com/raspberrypi/utils.git
-
-RUN cd utils && \
+RUN git clone https://github.com/raspberrypi/utils.git && \
+    cd utils && \
     cmake . && \
     make && \
     make install
@@ -34,13 +32,10 @@ RUN cd utils && \
 # Download the kernel image
 ENV IMAGE_FILE=2024-03-12-raspios-bullseye-arm64-lite.img
 
-RUN wget https://downloads.raspberrypi.com/raspios_oldstable_lite_arm64/images/raspios_oldstable_lite_arm64-2024-03-12/${IMAGE_FILE}.xz
-
-# Uncompress the image
-RUN xz -d ${IMAGE_FILE}.xz
+RUN wget https://downloads.raspberrypi.com/raspios_oldstable_lite_arm64/images/raspios_oldstable_lite_arm64-2024-03-12/${IMAGE_FILE}.xz && \
+    xz -d ${IMAGE_FILE}.xz
 
 # Resize the image to next power of two
-RUN cp ${IMAGE_FILE} ${IMAGE_FILE}.bak 
 RUN CURRENT_SIZE=$(stat -c%s "${IMAGE_FILE}") && \
     NEXT_POWER_OF_TWO=$(python3 -c "import math; \
                                     print(2**(math.ceil(math.log(${CURRENT_SIZE}, 2))))") && \
@@ -89,4 +84,4 @@ RUN mcopy /tmp/ssh x:/ && \
 EXPOSE 2222
 EXPOSE 5555
 
-ENTRYPOINT [ "/bin/bash" ]
+ENTRYPOINT [ "./entrypoint.sh" ]
